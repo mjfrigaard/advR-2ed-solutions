@@ -1,0 +1,12 @@
+---
+title: "Advanced R, 2nd Edition (solutions)"
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+These are my worked solutions to [Advanced R, 2nd edition](https://adv-r.hadley.nz/) by Hadley Wickham. 
+
+You can see more solutions [here.](https://advanced-r-solutions.rbind.io/) 
