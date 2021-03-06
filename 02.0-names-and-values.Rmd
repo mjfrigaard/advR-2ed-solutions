@@ -1,0 +1,244 @@
+---
+title: "Notes from Advanced R, 2nd Ed, 2) Names and Values"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::readthedown:
+    highlight: kate
+---
+
+
+```{r setup, echo=FALSE, cache=FALSE}
+library(knitr)
+library(rmdformats)
+library(tidyverse)
+# figures folder
+fs::dir_create("./figs/")
+## Global options
+options(max.print = "75")
+opts_chunk$set(
+  echo = TRUE,
+  cache = FALSE,
+  prompt = FALSE,
+  tidy = FALSE,
+  comment = "#> ",
+  message = FALSE,
+  warning = FALSE,
+  fig.path = "figs/"
+)
+opts_knit$set(width = 75)
+```
+
+# Packages
+
+This section uses the `lobstr` package. 
+
+```{r lobstr}
+library(lobstr)
+```
+
+## What's in a name?
+
+Name a vector: 
+
+```{r named-vector}
+x <- c(1, 2, 3)
+x
+```
+
+Turns out, this is *not* creating an object and giving it a name, it's assigning a value (or object) to a name.
+
+> In other words, the object (`c(1, 2, 3)`), or value, doesn’t have a name; it’s actually the name (`x`) that has a value.
+
+But what is the difference?
+
+> you can think of a name as a reference to a value. 
+
+Because if we take `x` and assign to a new name `y`, we can see the value (or object) `c(1, 2, 3)` gets another reference (or name), as opposed to getting a copy of the same value. 
+
+```{r another-named-vector}
+y <- x
+y
+```
+
+Check out the diagram below for an example. 
+
+```{r binding-2.png, echo=FALSE, message=FALSE, warning=FALSE}
+# download.file(url = "https://d33wubrfki0l68.cloudfront.net/bdc72c04d3135f19fb3ab13731129eb84c9170af/f0ab9/diagrams/name-value/binding-2.png", destfile = "figs/binding-2.png")
+knitr::include_graphics(path = "figs/binding-2.png")
+```
+
+## What's in a value?
+
+The little `0x74b` is the address,
+
+> While the vector doesn’t have a name, I’ll occasionally need to refer to an object independent of its bindings. To make that possible, I’ll label values with a unique identifier. These identifiers have a special form that looks like the object’s memory “address”, i.e. the location in memory where the object is stored. But because the actual memory addresses changes every time the code is run, we use these identifiers instead.
+
+We can check for the object's memory address using `lobstr::obj_addr()`
+
+```{r demo-obj_addr}
+obj_addr(x)
+obj_addr(y)
+```
+
+```{r clear-00, echo=FALSE}
+rm(list = ls())
+```
+
+### Syntactic names and non-syntactic names
+
+When creating a name for an object, they have to follow a few basic rules. For example, 
+
+> A syntactic name must consist of letters, digits, `.` and `_` but can’t begin with `_` or a digit. Additionally, you can’t use any of the reserved words like `TRUE`, `NULL`, `if`, and `function` (see the complete list in `?Reserved`)
+
+```{r bad-names, error=TRUE}
+_abc <- 1
+
+function <- 10
+```
+
+We can see these don't work for names. 
+
+### The backtick
+
+We can create crazy names (but we **shouldn't**) with backticks.
+
+```{r backticks}
+`_abc` <- 1
+`_abc`
+
+`function` <- 10
+`function` 
+```
+
+We can also use the quotes but shouldn't.
+
+```{r clear-01, echo=FALSE}
+rm(list = ls())
+```
+
+
+## Exercises 2.2.2
+
+> Explain the relationship between `a`, `b`, `c` and `d` in the following code:
+
+```{r ex-2.2.2-1}
+# the name 'a' is assigned the value (or object) '1:10' 
+a <- 1:10
+# the name 'b' is assigned the same value as 'a'
+b <- a
+# the name 'c' is assigned the same value as 'a' and 'b'
+c <- b
+# the name 'd' is assigned the value (or object) '1:10'
+d <- 1:10
+```
+
+```{r clear-02, echo=FALSE}
+rm(list = ls())
+```
+
+> 2. The following code accesses the `mean` function in multiple ways. Do they all point to the same underlying function object? Verify this with `lobstr::obj_addr()`.
+
+I will check this with `identical()`
+
+```{r ex-2.2.2-2}
+identical(x = obj_addr(mean), y = obj_addr(base::mean))
+identical(x = obj_addr(mean), y = obj_addr(get("mean")))
+identical(x = obj_addr(mean), y = obj_addr(evalq(mean)))
+identical(x = obj_addr(mean), y = obj_addr(match.fun("mean")))
+```
+
+This shows `mean` is identical to the others, but `obj_addr()` tells us if the address is the same. 
+
+```{r mean_list}
+mean_list <- list(a = mean, b = base::mean, c = get("mean"), d = evalq(mean), e = match.fun("mean"))
+str(mean_list)
+```
+
+Now use `purrr::map()` to check address. 
+
+```{r ex-2.2.2-2.1}
+purrr::map(.x = mean_list, .f = obj_addr)
+```
+
+> 3. By default, base R data import functions, like `read.csv()`, will automatically convert non-syntactic names to syntactic ones. Why might this be problematic? What option allows you to suppress this behaviour?
+
+The `check.names` argument is used to verify if the names are syntactically valid. 
+
+```
+check.names	- logical. If `TRUE` then the names of the variables in the data 
+frame are checked to ensure that they are syntactically valid variable names. 
+If necessary they are adjusted (by `make.names`) so that they are, and also to
+ensure that there are no duplicates.
+```
+
+Below we test this with a few variations on the data `bad-names.csv`
+
+```
+_abc, function, 4
+1, b, TRUE
+2, d, FALSE
+3, c, TRUE
+```
+
+```{r with-check-names}
+read.csv(file = "data/bad-names.csv", check.names = TRUE)
+```
+
+...with `check.names` set to `FALSE`.
+
+```{r without-check-names}
+read.csv(file = "data/bad-names.csv", check.names = FALSE)
+```
+
+```{r clear-03, echo=FALSE}
+rm(list = ls())
+```
+
+> 4. What rules does `make.names()` use to convert non-syntactic names into syntactic ones?
+
+The rules are in the **Details**
+
+```
+A syntactically valid name consists of letters, numbers and the dot or underline
+characters and starts with a letter or the dot not followed by a number. Names
+such as ".2way" are not valid, and neither are the reserved words.
+
+The definition of a letter depends on the current locale, but only ASCII digits
+are considered to be digits.
+
+The character "X" is prepended if necessary. All invalid characters are 
+translated to ".". A missing value is translated to "NA". Names which match R
+keywords have a dot appended to them. Duplicated values are altered by 
+make.unique.
+```
+
+This means we should expect `X` in front of the `_abc` and `X4` variables, and a period behind `function`.
+
+```{r make.names-rules}
+utils::read.csv(file = "data/bad-names.csv", check.names = FALSE) %>% 
+  base::names() %>% 
+  base::make.names()
+```
+
+
+> 5. I slightly simplified the rules that govern syntactic names. Why is `.123e1` not a syntactic name? Read `?make.names` for the full details.
+
+This makes a name by adding an `X` and moving the decimal back to the correct place, because if `.123e1` is `1.23`
+
+```{r}
+.123e1
+```
+
+Then the `name` for this becomes the name for `1.23`. 
+
+```{r make.names}
+make.names(.123e1)
+make.names(1.23)
+```
+
+
+```{r identical-make.names}
+identical(x = make.names(.123e1), y = make.names(1.23))
+```
+
+

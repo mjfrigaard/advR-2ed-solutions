@@ -1,0 +1,269 @@
+---
+title: "Notes from Advanced R, 2nd Ed, - 03: Subsetting"
+date: "`r Sys.Date()`"
+output:
+  rmdformats::downcute:
+    highlight: kate
+---
+
+
+```{r setup, include=FALSE, cache=FALSE}
+library(knitr)
+library(rmdformats)
+library(tidyverse)
+# figures folder
+fs::dir_create("./figs/")
+## Global options
+options(max.print = "75")
+opts_chunk$set(
+  echo = TRUE,
+  cache = FALSE,
+  prompt = FALSE,
+  tidy = FALSE,
+  comment = "#> ",
+  error = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.path = "figs/"
+)
+opts_knit$set(width = 75)
+```
+
+## Types of subsetting
+
+```{r packages, message=FALSE, warning=FALSE}
+library(repurrrsive)
+library(tidyverse)
+library(lazyeval)
+```
+
+We can use `[[]]`, `[]` and `$`. 
+
+If we have a `data.frame` we get the following output: 
+
+```{r data.frame-subsetting}
+# what am I?
+str(mtcars)
+# what do I return?
+str(mtcars$mpg) # vector
+# what do I return?
+str(mtcars["mpg"]) # data.frame
+# what do I return?
+str(mtcars[["mpg"]]) # vector
+# what do I return?
+str(subset(x = mtcars, select = "mpg"))
+```
+
+If we have a `tibble` we get the following output: 
+
+```{r tibble-subsetting}
+# convert
+mtcars_tibble <- as_tibble(x = mtcars)
+# what am I?
+str(mtcars_tibble) # tibble (S3: tbl_df/tbl/data.frame)
+# what do I return?
+str(mtcars_tibble$mpg) # vector
+# what do I return?
+str(mtcars_tibble["mpg"]) # tibble (S3: tbl_df/tbl/data.frame)
+# what do I return?
+str(mtcars_tibble[["mpg"]]) # vector
+# what do I return?
+str(subset(x = mtcars_tibble, select = "mpg"))
+```
+
+### Everything is function 
+
+You'll often hear/read the subsetting characters referred to as 'operators', but they are actually functions. 
+
+```{r all-functions}
+class(`[`)
+class(`[[`)
+class(`$`)
+class(`<-`)
+```
+
+
+### Use case (selecting file based metadata or name)
+
+Assume I have data from a folder with timestamp in the file name (these data come from the [COVID-19 Data Repository by the Center for Systems Science and Engineering (CSSE) at Johns Hopkins University](https://github.com/CSSEGISandData/COVID-19))
+
+```{r dir_tree}
+fs::dir_tree("data/covid-data")
+```
+
+I want to import **only the newest data, based on the file name**. I can use `dplyr` and `purrr::as_vector()` with `.[1]` to get the most recent data.
+
+```{r convert-to-vector-as_vector}
+fs::dir_info("data/covid-data") %>%
+  dplyr::select(path) %>%
+  dplyr::arrange(desc(path)) %>%
+  purrr::as_vector() %>%
+  .[1] %>%
+  readr::read_csv(.) %>%
+  utils::head()
+```
+
+Or I can use `slice()` and `as.character()`
+
+```{r convert-to-vector-slice}
+fs::dir_info("data/covid-data") %>%
+  dplyr::select(path) %>%
+  dplyr::arrange(desc(path)) %>%
+  dplyr::slice(1) %>%
+  base::as.character() %>%
+  readr::read_csv(.) %>%
+  utils::head()
+```
+
+## `purrr` subsetting 
+
+The `purrr` package has some great functions for subsetting lists. 
+
+### `keep()`
+
+`keep()` is a great one. Here is an example with `mtcars`
+
+```{r keep-for-subsetting}
+purrr::keep(.x = mtcars, function(x) {
+  3 %in% x
+})
+```
+
+And here is an example with `mtcars` as a list. 
+
+```{r keep-for-subsetting-as.list}
+purrr::keep(.x = as.list(mtcars), function(x) {
+  3 %in% x
+})
+```
+
+## `select_list()`
+
+It's like, `dplyr::select()`, but for lists. 
+
+```{r select_list}
+select_list <- function(list_input, ...) {
+  cols <- lazyeval::lazy_dots(...)
+
+  columns <- purrr::map_chr(
+    cols,
+    function(x) {
+      as.character(x$expr)
+    }
+  )
+
+  base::unlist(
+    x = list_input[columns],
+    recursive = FALSE
+  )
+}
+```
+
+When we test `select_list()`, we see all the items are named. 
+
+```{r test-select_list}
+select_list(list_input = as.list(mtcars), mpg)
+```
+
+I also played around with a function that would find the elements in the list by position and name, but this has limited application because of what you'd need to know about the structure of this list before using. 
+
+```{r select_list_pos_name}
+select_list_pos_name <- function(list_object, position, name) {
+  nm <- base::as.character(name)
+  pos <- base::as.integer(position)
+
+  purrr::as_vector(list_object[[pos]][nm])
+}
+```
+
+```{r test-select_list_pos_name}
+# for got_chars
+select_list_pos_name(list_object = got_chars, position = 2, name = "url")
+```
+
+
+## `list_select()` from JP
+
+`list_select()` was added to Slack and improves on the functions above. 
+
+```{r create-list_select}
+list_select <- function(list, ..., by = "name") {
+  items <- lazyeval::lazy_dots(...)
+  if (by == "name") {
+    items <- purrr::map_chr(items, function(x) {
+      as.character(x$expr)
+    })
+    if (is.null(list[[items]])) {
+      return(NULL)
+    }
+    return(list[items])
+  } else if (by == "position") {
+    # browser()
+    items <- purrr::map_dbl(items, function(x) {
+      as.numeric(x$expr)
+    })
+    list <- purrr::map(
+      items,
+      function(x) {
+        if (!is.null(list[x][[1]])) {
+          return(list[x])
+        }
+      }
+    )
+    return(list)
+  }
+}
+```
+
+When we test it, we see the following: 
+
+```{r my_list}
+my_list <- list(a = "string", 
+             `1` = "string",
+             "b" = list("wlek",
+                        "name" = list("string")),
+             "cstring")
+my_list
+```
+
+```{r test-list-select-a}
+my_list %>% list_select(a)
+```
+
+```{r test-list-select-1}
+my_list %>% list_select(1)
+```
+
+```{r test-list-select-quoted-1}
+my_list %>% list_select(`1`)
+```
+
+```{r test-list-select-b}
+my_list %>% list_select(b)
+```
+
+```{r test-list-select-missing_item}
+my_list %>% list_select(missing_item)
+```
+
+```{r test-list-select-nothing}
+my_list %>% list_select("nothing")
+```
+
+```{r test-list-select-b-bname}
+my_list %>% list_select(b) %>% list_select(b$name)
+```
+
+```{r test-list-select-index-by-position}
+my_list %>% list_select(1,6, by = 'position')
+```
+
+## Honorable mention
+
+Whenever I am dealing with a lot of lists, I use the `listviewer` package to dig into their contents. 
+
+```{r listviewer}
+library(listviewer)
+listviewer::jsonedit(listdata = sw_films)
+```
+
